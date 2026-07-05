@@ -1,127 +1,79 @@
 import streamlit as st
 import numpy as np
-import matplotlib.pyplot as plt
-import time
 from sklearn.datasets import fetch_openml
-from sklearn.decomposition import PCA
+from sklearn.model_selection import train_test_split
 from sklearn.neighbors import KNeighborsClassifier
+from sklearn.metrics import accuracy_score
 
-# --- CONFIGURATION DE LA PAGE ---
-st.set_page_config(page_title="TP KNN - Master IAENG", layout="wide")
-st.title("TP KNN : Vote Local, Voisinage et Malédiction de la Dimension")
-st.subheader("EL MEHDI - Master IAENG")
+st.set_page_config(page_title="TP-KNN MNIST", page_icon="👥", layout="centered")
+st.header("EL MEHDI - IAENG")
+st.title("👥 TP-KNN : Détection du Chiffre 0")
+st.write("Classification binaire avec le Dataset MNIST (0 vs Autres chiffres)")
 
-# --- 1. CHARGEMENT OPTIMISÉ DU DATASET ---
+# 1. Chargement des données (Mise en cache pour éviter les lenteurs)
 @st.cache_data
-def load_mnist():
+def load_data():
+    # Limité à 5000 images au total pour que le KNN reste rapide au calcul
     mnist = fetch_openml('mnist_784', version=1, as_frame=False, parser='auto')
-    X, y = mnist.data / 255.0, mnist.target.astype(int)
-    # Sélection des chiffres 0 et 1 pour la clarté du voisinage
-    mask = (y == 0) | (y == 1)
-    return X[mask], y[mask]
+    X, y = mnist.data[:5000] / 255.0, mnist.target[:5000]
+    return X, y
 
-X, y = load_mnist()
+X, y = load_data()
 
-# --- INTERFACE CORPS ---
-col_ctrl, col_visu = st.columns([1, 2])
+# 2. Transformation pour le KNN (Approche Binaire)
+# Classe 1 : Le chiffre est '0'
+# Classe 0 : Le chiffre est n'importe quel autre chiffre (1 à 9)
+y_binary = np.where(y == '0', 1, 0)
 
-with col_ctrl:
-    st.header("⚙️ Configuration du KNN")
-    
-    # 1. Sélection de l'image de test
-    img_idx = st.slider("Sélectionner une image de test", 0, len(X) - 1, 10)
-    image_test = X[img_idx]
-    label_vrai = y[img_idx]
-    
-    st.markdown("---")
-    st.write("### 🎛️ Hyperparamètres")
-    
-    # Choisir le nombre de voisins (Impairs pour éviter les égalités)
-    K = st.slider("Nombre de voisins (K)", min_value=1, max_value=15, value=3, step=2)
-    
-    mode = st.radio("Type d'analyse :", 
-                    ["Test 1 : Visualisation des K plus proches voisins", 
-                     "Test 2 : Impact de la PCA (Vitesse vs Dimension)"])
+# Séparation des données en Entraînement / Test (2000 train / 600 test approximativement)
+X_train, X_test, y_train, y_test = train_test_split(X, y_binary, test_size=0.2, random_state=42)
+X_train = X_train[:2000]
+y_train = y_train[:2000]
 
-# --- 2. LOGIQUE DU MODE 1 : RECHERCHE VISUELLE DES VOISINS ---
-if "Test 1" in mode:
-    # On applique une PCA légère à 20 dimensions pour accélérer et stabiliser la métrique
-    pca = PCA(n_components=20)
-    X_train_pca = pca.fit_transform(X)
-    img_test_pca = pca.transform(image_test.reshape(1, -1))
-    
-    # Entraînement du KNN
-    knn = KNeighborsClassifier(n_neighbors=K)
-    knn.fit(X_train_pca, y)
-    
-    # Trouver les indices et distances des K voisins les plus proches
-    distances, indices = knn.kneighbors(img_test_pca)
-    prediction = knn.predict(img_test_pca)[0]
+# 3. Entraînement du KNN
+@st.cache_resource
+def train_knn(X_t, y_t):
+    # n_neighbors=3 regarde les 3 images les plus proches
+    model = KNeighborsClassifier(n_neighbors=3)
+    model.fit(X_t, y_t)
+    return model
 
-    with col_visu:
-        st.header("📊 Analyse du Voisinage Local")
-        
-        # Affichage de la cible
-        col_target, col_pred = st.columns(2)
-        with col_target:
-            fig_t, ax_t = plt.subplots(figsize=(2, 2))
-            ax_t.imshow(image_test.reshape(28, 28), cmap='gray')
-            ax_t.set_title(f"Image Test (Vrai: {label_vrai})")
-            ax_t.axis('off')
-            st.pyplot(fig_t)
-            
-        with col_pred:
-            if prediction == label_vrai:
-                st.success(f"🎯 Prédiction KNN : **{prediction}** (Correct !)")
-            else:
-                st.error(f"❌ Prédiction KNN : **{prediction}** (Erreur)")
-            st.info(f"Le modèle a analysé les {K} images les plus proches dans l'espace mathématique pour voter.")
+clf = train_knn(X_train, y_train)
 
-        st.markdown("---")
-        st.write(f"### 👥 Les {K} plus proches voisins trouvés dans le dataset :")
-        
-        # Affichage des K voisins côte à côte
-        fig_v, axes = plt.subplots(1, K, figsize=(3 * K, 3))
-        if K == 1:
-            axes = [axes] # Rendre itérable si K=1
-            
-        for i, idx_voisin in enumerate(indices[0]):
-            axes[i].imshow(X[idx_voisin].reshape(28, 28), cmap='plasma')
-            axes[i].set_title(f"Voisin {i+1}\nClasse: {y[idx_voisin]}\nDist: {distances[0][i]:.2f}", fontsize=10)
-            axes[i].axis('off')
-            
-        st.pyplot(fig_v)
+# 4. Affichage des performances
+st.write("### 📊 Performance du modèle")
+preds = clf.predict(X_test)
+acc = accuracy_score(y_test, preds)
+st.success(f"Précision (Accuracy) globale sur l'ensemble de test : {acc * 100:.2f}%")
 
-# --- 3. LOGIQUE DU MODE 2 : MALÉDICTION DE LA DIMENSIONNALITÉ ---
+# 5. Interface interactive de test
+st.write("### 🔍 Tester le modèle de manière interactive")
+max_idx = len(X_test) - 1
+idx = st.number_input(
+    f"Choisissez un index d'image du dataset de test (0 à {max_idx}) :", 
+    min_value=0, 
+    max_value=max_idx, 
+    value=0
+)
+
+image_to_test = X_test[idx]
+true_label = y_test[idx]
+
+# Gestion propre de la chaîne de caractères
+label_text = "C'est un 0" if true_label == 1 else "Autre chiffre"
+
+# Affichage de l'image MNIST correspondante
+st.image(
+    image_to_test.reshape(28, 28), 
+    caption=f"Classe réelle : {label_text}", 
+    width=150
+)
+
+# Prédiction en temps réel
+prediction = clf.predict([image_to_test])[0]
+
+st.write("---")
+if prediction == 1:
+    st.write("🔮 **Prédiction du modèle :** 🟢 **C'est un 0 !**")
 else:
-    with col_visu:
-        st.header("⚡ Benchmarking : Espace Brut (784D) vs Espace PCA (20D)")
-        
-        # Sous-échantillonnage pour éviter que le Streamlit Cloud ne crash à cause de la lenteur du 784D
-        X_sub, y_sub = X[:2000], y[:2000]
-        
-        # --- CAS 1 : SANS PCA (784 Dimensions) ---
-        start_time = time.time()
-        knn_brut = KNeighborsClassifier(n_neighbors=K)
-        knn_brut.fit(X_sub, y_sub)
-        acc_brut = knn_brut.score(X_sub, y_sub)
-        time_brut = time.time() - start_time
-        
-        # --- CAS 2 : AVEC PCA (20 Dimensions) ---
-        start_time = time.time()
-        pca_bench = PCA(n_components=20)
-        X_sub_pca = pca_bench.fit_transform(X_sub)
-        knn_pca = KNeighborsClassifier(n_neighbors=K)
-        knn_pca.fit(X_sub_pca, y_sub)
-        acc_pca = knn_pca.score(X_sub_pca, y_sub)
-        time_pca = time.time() - start_time
-        
-        # Affichage du tableau comparatif
-        st.write("### 📋 Tableau de comparaison des performances")
-        st.table({
-            "Métrique": ["Nombre de Dimensions", "Précision (Accuracy)", "Temps d'exécution (s)"],
-            "KNN Brut (Sans PCA)": ["784", f"{acc_brut*100:.2f}%", f"{time_brut:.4f} s"],
-            "KNN + PCA (Optimisé)": ["20", f"{acc_pca*100:.2f}%", f"{time_pca:.4f} s"]
-        })
-        
-        st.success("💡 **Conclusion de l'expert :** La PCA réduit drastiquement le temps de calcul tout en conservant (voire améliorant) la précision, car elle supprime le bruit de fond qui fausse la distance euclidienne en haute dimension.")
+    st.write("🔮 **Prédiction du modèle :** 🔴 **Anomalie (Ce n'est pas un 0)**")
