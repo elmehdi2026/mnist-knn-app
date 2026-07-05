@@ -6,7 +6,7 @@ from sklearn.neighbors import KNeighborsClassifier
 from sklearn.metrics import accuracy_score
 
 st.set_page_config(page_title="TP-KNN MNIST", page_icon="👥", layout="centered")
-
+st.header("EL MEHDI - IAENG")
 st.title("👥 TP-KNN : Détection du Chiffre 0")
 st.write("Classification binaire avec le Dataset MNIST (0 vs Autres chiffres)")
 
