@@ -10,11 +10,11 @@ st.header("EL MEHDI - IAENG")
 st.title("👥 TP-KNN : Détection du Chiffre 0")
 st.write("Classification binaire avec le Dataset MNIST (0 vs Autres chiffres)")
 
-# 1. Chargement des données (Optimisé à 700 images)
+# 1. Chargement des données (Optimisé à 1700 images)
 @st.cache_data
 def load_data():
     mnist = fetch_openml('mnist_784', version=1, as_frame=False, parser='auto')
-    X, y = mnist.data[:700] / 255.0, mnist.target[:700]
+    X, y = mnist.data[:1700] / 255.0, mnist.target[:1700]
     return X, y
 
 with st.spinner("Chargement des données..."):
